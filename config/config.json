@@ -1,0 +1,38 @@
+{
+"development": {
+  "username": "userpr",
+  "password": "pr2020",
+  "database": "dbSF_BizNet_AOPHCIS",
+  "host": "10.14.55.66",
+  "dialect": "mssql",
+  "dialectOptions": {
+    "options": {
+      "requestTimeout": 60000,
+      "encrypt": false,         
+      "enableArithAbort": true  
+    }
+  },
+  "pool": {
+    "max": 10,                 
+    "min": 1,                 
+    "acquire": 60000,          
+    "idle": 10000             
+  }
+},
+  "test": {
+    "username": "userpr",
+    "password": "pr2020",
+    "database": "dbSF_BizNet_AOPHCIS",
+    "host": "10.14.55.66",
+    "dialect": "mssql",
+    "dialectModule": "tedious"
+  },
+  "production": {
+    "username": "userpr",
+    "password": "pr2020",
+    "database": "dbSF_BizNet_AOPHCIS",
+    "host": "10.14.55.66",
+    "dialect": "mssql",
+    "dialectModule": "tedious"
+  }
+}
