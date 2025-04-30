@@ -21,16 +21,16 @@ const updateShift = async () => {
   try {
     moment.locale("id");
 
-    // const firstDay = moment()
-    //   .startOf("month")
-    //   .format("YYYY-MM-DD HH:mm:ss.SSS");
-    // const lastDay = moment()
-    //   .subtract(1, "days")
-    //   .format("YYYY-MM-DD HH:mm:ss.SSS");
+    const firstDay = moment()
+      .startOf("month")
+      .format("YYYY-MM-DD HH:mm:ss.SSS");
+    const lastDay = moment()
+      .subtract(1, "days")
+      .format("YYYY-MM-DD HH:mm:ss.SSS");
 
-    const firstDay = "2025-03-01 00:00:00.000";
+    // const firstDay = "2025-04-01 00:00:00.000";
 
-    const lastDay = "2025-03-31 23:59:59.000";
+    // const lastDay = "2025-03-31 23:59:59.000";
 
     console.log(
       `Fetching attendance records from ${firstDay} to ${lastDay}...`
@@ -47,11 +47,10 @@ const updateShift = async () => {
 
       const getDataAbsen = await TTADATTENDANCE.findAll({
         where: {
-          shiftdaily_code: { [Op.like]: "%S3RM%" },
+          shiftdaily_code: { [Op.like]: "%S3_upload%" },
           attend_code: { [Op.notLike]: "Z1%" },
           shiftstarttime: { [Op.between]: [firstDay, lastDay] },
           company_id: "18929",
-          emp_id: "31017717",
         },
         limit: batchSize,
         offset: offset,
@@ -93,8 +92,8 @@ const processRecord = async (absen) => {
       return;
     }
 
-    const shiftStartUTC = moment.utc(absen.shiftstarttime);
-    const shiftEndUTC = moment.utc(absen.shiftendtime);
+    const shiftStartUTC = moment.utc(absen.shiftstarttime).add(1, "day");
+    const shiftEndUTC = moment.utc(absen.shiftendtime).add(1, "day");
 
     const attendDateRealStart = shiftStartUTC.clone().subtract(6, "hours");
     const attendDateRealEnd = shiftStartUTC.clone().add(4, "hours");
