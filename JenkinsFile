@@ -29,6 +29,7 @@ pipeline {
                 echo 'Deploying the project...'
                 // Example: Run deploy script
                 // sh './deploy.sh'
+                //testing
             }
         }
     }
