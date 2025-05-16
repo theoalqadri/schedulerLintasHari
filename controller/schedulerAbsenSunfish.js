@@ -47,7 +47,7 @@ const updateShift = async () => {
 
       const getDataAbsen = await TTADATTENDANCE.findAll({
         where: {
-          shiftdaily_code: { [Op.like]: "%S3CONTRACT" },
+          shiftdaily_code: { [Op.like]: "%S3OFFCONTRACT" },
           attend_code: { [Op.notLike]: "Z1%" },
           shiftstarttime: { [Op.between]: [firstDay, lastDay] },
           company_id: "18929",
