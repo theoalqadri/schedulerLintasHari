@@ -21,16 +21,16 @@ const updateShift = async () => {
   try {
     moment.locale("id");
 
-    const firstDay = moment()
-      .startOf("month")
-      .format("YYYY-MM-DD HH:mm:ss.SSS");
-    const lastDay = moment()
-      .subtract(1, "days")
-      .format("YYYY-MM-DD HH:mm:ss.SSS");
+    // const firstDay = moment()
+    //   .startOf("month")
+    //   .format("YYYY-MM-DD HH:mm:ss.SSS");
+    // const lastDay = moment()
+    //   .subtract(1, "days")
+    //   .format("YYYY-MM-DD HH:mm:ss.SSS");
 
-    // const firstDay = "2025-04-01 00:00:00.000";
+    const firstDay = "2025-04-01 00:00:00.000";
 
-    // const lastDay = "2025-03-31 23:59:59.000";
+    const lastDay = "2025-04-30 23:59:59.000";
 
     console.log(
       `Fetching attendance records from ${firstDay} to ${lastDay}...`
@@ -47,10 +47,23 @@ const updateShift = async () => {
 
       const getDataAbsen = await TTADATTENDANCE.findAll({
         where: {
-          shiftdaily_code: { [Op.like]: "%S3_upload%" },
+          shiftdaily_code: { [Op.like]: "%S3_upload" },
           attend_code: { [Op.notLike]: "Z1%" },
           shiftstarttime: { [Op.between]: [firstDay, lastDay] },
           company_id: "18929",
+          actual_in: { [Op.lt]: 0 },
+          //buat s3contract
+          // [Op.and]: [
+          //   sequelize.where(
+          //     sequelize.fn(
+          //       "CONVERT",
+          //       sequelize.literal("VARCHAR"),
+          //       sequelize.col("shiftstarttime"),
+          //       sequelize.literal("108")
+          //     ),
+          //     "00:30:00"
+          //   ),
+          // ],
         },
         limit: batchSize,
         offset: offset,
@@ -153,7 +166,6 @@ const processRecord = async (absen) => {
       },
     });
 
-    console.log(getEarlyOvt);
     let startOvt;
     let endOvt;
     let absStats = 0;
@@ -257,6 +269,7 @@ const processRecord = async (absen) => {
       }
     } else {
       absStats += 1;
+      diffIn = 0;
       console.log(`❌ No check-in record found for emp_id ${absen.emp_id}.`);
     }
     let leaveTime;
@@ -393,6 +406,7 @@ const processRecord = async (absen) => {
       }
 
       // Use a transaction to update safely
+      console.log(diffOut);
       await sequelize.transaction(async (t) => {
         await TTADATTENDANCE.update(
           {
@@ -507,6 +521,7 @@ const processRecord = async (absen) => {
       });
     } else {
       absStats += 2;
+      diffOut = 0;
       console.log(`❌ No check-out record found for emp_id ${absen.emp_id}.`);
     }
 
@@ -526,6 +541,16 @@ const processRecord = async (absen) => {
         };
 
         await TTADATTSTATUSDETAIL.create(statusDetail);
+        await TTADATTENDANCE.update(
+          {
+            starttime: null,
+            actual_in: null,
+            ip_starttime: "10.14.55.218",
+            modified_by: "SchedulerSLintas",
+            modified_date: moment().format("YYYY-MM-DD HH:mm:ss"),
+          },
+          { where: { attend_id: absen.attend_id } }
+        );
       } else if (absStats == 2) {
         let statusDetail = {
           attend_id: absen.attend_id,
@@ -541,6 +566,16 @@ const processRecord = async (absen) => {
         };
 
         await TTADATTSTATUSDETAIL.create(statusDetail);
+        await TTADATTENDANCE.update(
+          {
+            endtime: null,
+            actual_out: null,
+            ip_starttime: "10.14.55.218",
+            modified_by: "SchedulerSLintas",
+            modified_date: moment().format("YYYY-MM-DD HH:mm:ss"),
+          },
+          { where: { attend_id: absen.attend_id } }
+        );
       } else {
         let statusDetail = {
           attend_id: absen.attend_id,
