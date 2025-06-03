@@ -28,9 +28,9 @@ const updateShift = async () => {
     //   .subtract(1, "days")
     //   .format("YYYY-MM-DD HH:mm:ss.SSS");
 
-    const firstDay = "2025-04-01 00:00:00.000";
+    const firstDay = "2025-05-01 00:00:00.000";
 
-    const lastDay = "2025-04-30 23:59:59.000";
+    const lastDay = "2025-05-27 23:59:59.000";
 
     console.log(
       `Fetching attendance records from ${firstDay} to ${lastDay}...`
@@ -47,23 +47,32 @@ const updateShift = async () => {
 
       const getDataAbsen = await TTADATTENDANCE.findAll({
         where: {
-          shiftdaily_code: { [Op.like]: "%S3OFFCONTRACT" },
-          attend_code: { [Op.notLike]: "Z1%" },
+          shiftdaily_code: { [Op.like]: "%S3%" },
+          attend_code: {
+            [Op.and]: [
+              { [Op.notLike]: "Z1%" },
+              { [Op.notLike]: "ANL%" },
+              { [Op.notLike]: "LL%" },
+            ],
+          },
           shiftstarttime: { [Op.between]: [firstDay, lastDay] },
           company_id: "18929",
-          actual_in: { [Op.lt]: 0 },
-          //buat s3contract
-          // [Op.and]: [
-          //   sequelize.where(
-          //     sequelize.fn(
-          //       "CONVERT",
-          //       sequelize.literal("VARCHAR"),
-          //       sequelize.col("shiftstarttime"),
-          //       sequelize.literal("108")
-          //     ),
-          //     "00:30:00"
-          //   ),
-          // ],
+          [Op.or]: [
+            { remark: null },
+            { remark: { [Op.notLike]: "Leave Request%" } },
+          ],
+          // actual_in: { [Op.lt]: 0 },
+          [Op.and]: [
+            sequelize.where(
+              sequelize.fn(
+                "CONVERT",
+                sequelize.literal("VARCHAR"),
+                sequelize.col("shiftstarttime"),
+                sequelize.literal("108")
+              ),
+              "00:30:00"
+            ),
+          ],
         },
         limit: batchSize,
         offset: offset,
@@ -175,7 +184,7 @@ const processRecord = async (absen) => {
       if (getEarlyOvt) {
         ovtTimeFrom = moment.utc(getEarlyOvt.ot_starttime);
         console.log(absen.daytype, arrivalTime, ovtTimeFrom, "MSMDMSM");
-        if (absen.daytype === "OFF") {
+        if (absen.daytype === "OFF" || absen.daytype == "PHOFF") {
           if (arrivalTime > ovtTimeFrom) {
             getInOff = arrivalTime;
           } else {
@@ -278,7 +287,7 @@ const processRecord = async (absen) => {
       leaveTime = moment.utc(getOut.attend_date);
       if (getEarlyOvt) {
         ovtTimeTo = moment.utc(getEarlyOvt.ot_endtime);
-        if (absen.daytype == "OFF") {
+        if (absen.daytype == "OFF" || absen.daytype == "PHOFF") {
           console.log(leaveTime, ovtTimeTo);
           if (leaveTime > ovtTimeTo) {
             getOutOff = ovtTimeTo;
@@ -309,7 +318,11 @@ const processRecord = async (absen) => {
         }
       }
 
-      if (getInOff && getOutOff && absen.daytype == "OFF") {
+      if (
+        getInOff &&
+        getOutOff &&
+        (absen.daytype == "OFF" || absen.daytype == "PHOFF")
+      ) {
         timeOvt = getOutOff.diff(getInOff, "minutes");
       }
 
@@ -317,11 +330,21 @@ const processRecord = async (absen) => {
       if (timeOvt > 0) {
         let getTul = await TTADOVERTIMEFACTOR.findAll({
           where: { overtime_code: absen.overtime_code },
-          order: [["step", "ASC"]], // Ensure correct step order
+          order: [["factor_no", "ASC"]], // Ensure correct step order
         });
 
         if (getTul.length > 0) {
-          let hours = (timeOvt / 60).toFixed(2); // Convert minutes to hours (2 decimal places)
+          let hours;
+          if (
+            absen.shiftdaily_code == "S3OFF" ||
+            absen.shiftdaily_code == "S3OFFCONTRACT"
+          ) {
+            console.log("MASUK SINI YA MAS");
+            hours = ((timeOvt - 30) / 60).toFixed(2);
+            timeOvt = timeOvt - 30;
+          } else {
+            hours = (timeOvt / 60).toFixed(2);
+          }
           let index = 0;
 
           while (hours > 0) {
@@ -366,13 +389,24 @@ const processRecord = async (absen) => {
               if (tul.step == 0) {
                 index++; // Move to the next step in the overtime table
               }
-            } else if (hours > 0.27) {
-              // If > 16 minutes but < 1 hour, round to 0.5
-              console.log(tul.value * 0.5, " ini log 1");
-              otIndex += tul.value * 0.5;
+            } else if (hours >= 0.27) {
+              if (hours > 0.52) {
+                console.log(
+                  tul.value * 1,
+                  "ini log 1 - full hour karena > 31 menit"
+                );
+                otIndex += tul.value * 1;
+                step += 1;
+              } else {
+                console.log(
+                  tul.value * 0.5,
+                  "ini log 1 - half hour karena <= 31 menit"
+                );
+                otIndex += tul.value * 0.5;
+                step += 0.5;
+              }
+
               hours = 0;
-              step += 0.5;
-              console.log(otIndex, "ini log 2");
 
               let attIndex = {
                 attend_id: absen.attend_id,
@@ -494,6 +528,15 @@ const processRecord = async (absen) => {
               deductbreaktim: "",
             };
             await TTADATTOVTDETAIL.create(ovtDetail);
+          } else {
+            await TTADATTOVTDETAIL.update(
+              {
+                accepted_min: timeOvt,
+                modified_by: "SchedulerS3L",
+                modified_date: moment().format("YYYY-MM-DD HH:mm:ss"),
+              },
+              { where: { ovtdetail_id: checkOvtDetail.ovtdetail_id } }
+            );
           }
 
           let attOther = ["OTLEMBUR", "OTLEMBUROFF", "OTMEAL", "OTTRANSPORT"];
@@ -530,7 +573,7 @@ const processRecord = async (absen) => {
         let statusDetail = {
           attend_id: absen.attend_id,
           emp_id: absen.emp_id,
-          attend_date: arrivalTime.format("YYYY-MM-DD HH:mm:ss"),
+          attend_date: shiftStartUTC.format("YYYY-MM-DD HH:mm:ss"),
           company_id: "18929",
           attend_code: "NSI",
           remark: "",
@@ -555,7 +598,7 @@ const processRecord = async (absen) => {
         let statusDetail = {
           attend_id: absen.attend_id,
           emp_id: absen.emp_id,
-          attend_date: arrivalTime.format("YYYY-MM-DD HH:mm:ss"),
+          attend_date: shiftStartUTC.format("YYYY-MM-DD HH:mm:ss"),
           company_id: "18929",
           attend_code: "NSO",
           remark: "",
